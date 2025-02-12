@@ -1,8 +1,9 @@
 package main
 
 import (
-	"crypto/sha256"
-	"math/big"
+	"bytes"
+	"encoding/gob"
+	"fmt"
 	"time"
 )
 
@@ -14,11 +15,11 @@ type Block struct {
 	Nonce        int
 }
 
-func NewBlock(previousBlock *Block, data string) *Block {
+func NewBlock(previousBlockHash string, data string) *Block {
 	block := &Block{
 		Timestamp:    time.Now().String(),
 		Data:         data,
-		PreviousHash: previousBlock.Hash,
+		PreviousHash: previousBlockHash,
 		Nonce:        0,
 	}
 
@@ -31,14 +32,27 @@ func NewBlock(previousBlock *Block, data string) *Block {
 	return block
 }
 
-func (pow *ProofOfWork) Validate() bool {
-	var hashInt big.Int
+func (b *Block) Serialize() []byte {
+	var result bytes.Buffer
+	encoder := gob.NewEncoder(&result)
 
-	data := pow.prepareData(pow.Block.Nonce)
-	hash := sha256.Sum256([]byte(data))
-	hashInt.SetBytes(hash[:])
+	err := encoder.Encode(b)
+	if err != nil {
+		fmt.Printf("Serialization error: %s", err)
+	}
 
-	isValid := hashInt.Cmp(pow.Target) == -1
+	return result.Bytes()
+}
 
-	return isValid
+// DeserializeBlock TODO: videti samo da li da bude metoda ili obicna fja
+func DeserializeBlock(d []byte) *Block {
+	var block Block
+
+	decoder := gob.NewDecoder(bytes.NewReader(d))
+	err := decoder.Decode(&block)
+	if err != nil {
+		fmt.Printf("Deserialization error: %s", err)
+	}
+
+	return &block
 }
