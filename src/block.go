@@ -2,33 +2,27 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
 	"time"
 )
 
 type Block struct {
-	Data         string
+	Transactions []*Transaction
 	Timestamp    string
 	Hash         string
 	PreviousHash string
 	Nonce        int
 }
 
-func NewBlock(previousBlockHash string, data string) *Block {
-	block := &Block{
-		Timestamp:    time.Now().String(),
-		Data:         data,
-		PreviousHash: previousBlockHash,
-		Nonce:        0,
-	}
-
+func NewBlock(transactions []*Transaction, prevBlockHash string) *Block {
+	block := &Block{transactions, time.Now().String(), prevBlockHash, "", 0}
 	pow := NewProofOfWork(block)
 	nonce, hash := pow.Run()
 
 	block.Hash = string(hash[:])
 	block.Nonce = nonce
-
 	return block
 }
 
@@ -55,4 +49,21 @@ func DeserializeBlock(d []byte) *Block {
 	}
 
 	return &block
+}
+
+func (b *Block) HashTransactions() string {
+	var txHashes []string
+	var txHashesByte [][]byte
+	var txHash [32]byte
+
+	for _, hash := range txHashes {
+		txHashesByte = append(txHashesByte, []byte(hash))
+	}
+
+	for _, tx := range b.Transactions {
+		txHashes = append(txHashes, tx.ID)
+	}
+	txHash = sha256.Sum256(bytes.Join(txHashesByte, []byte{}))
+
+	return string(txHash[:])
 }
