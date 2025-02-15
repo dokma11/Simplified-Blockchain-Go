@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -16,14 +17,24 @@ type Block struct {
 	Nonce        int
 }
 
-func NewBlock(transactions []*Transaction, prevBlockHash string) *Block {
-	block := &Block{transactions, time.Now().String(), prevBlockHash, "", 0}
+func NewBlock(transactions []*Transaction, prevBlockHash []byte) *Block {
+	block := &Block{
+		transactions,
+		strconv.FormatInt(time.Now().Unix(), 10),
+		string(prevBlockHash),
+		"",
+		0}
 	pow := NewProofOfWork(block)
 	nonce, hash := pow.Run()
 
 	block.Hash = string(hash[:])
 	block.Nonce = nonce
+
 	return block
+}
+
+func NewGenesisBlock(coinbase *Transaction) *Block {
+	return NewBlock([]*Transaction{coinbase}, []byte{})
 }
 
 func (b *Block) Serialize() []byte {
