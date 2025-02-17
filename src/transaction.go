@@ -58,8 +58,7 @@ func NewCoinbaseTX(to, data string) *Transaction {
 	return &tx
 }
 
-func NewUTXOTransaction(from, to string, amount int, UTXOSet *UTXOSet) *Transaction {
-	wallet := getWalletForAddress(from)
+func NewUTXOTransaction(wallet *Wallet, to string, amount int, UTXOSet *UTXOSet) *Transaction {
 	pubKeyHash := HashPubKey(wallet.PublicKey)
 
 	acc, validOutputs := UTXOSet.FindSpendableOutputs(pubKeyHash, amount)
@@ -67,6 +66,7 @@ func NewUTXOTransaction(from, to string, amount int, UTXOSet *UTXOSet) *Transact
 		log.Panic("ERROR: Not enough funds")
 	}
 
+	from := fmt.Sprintf("%s", wallet.GetAddress())
 	inputs := createInputs(validOutputs, wallet.PublicKey)
 	outputs := createOutputs(amount, acc, from, to)
 
@@ -75,14 +75,6 @@ func NewUTXOTransaction(from, to string, amount int, UTXOSet *UTXOSet) *Transact
 	UTXOSet.Blockchain.SignTransaction(tx, wallet.PrivateKey)
 
 	return tx
-}
-
-func getWalletForAddress(address string) Wallet {
-	wallets, err := NewWallets()
-	if err != nil {
-		log.Panic(err)
-	}
-	return wallets.GetWallet(address)
 }
 
 func createInputs(validOutputs map[string][]int, pubKey []byte) []TXInput {
@@ -214,6 +206,18 @@ func (tx *Transaction) Serialize() []byte {
 	tx.ID = string(hash[:])
 
 	return encoded.Bytes()
+}
+
+func DeserializeTransaction(data []byte) Transaction {
+	var transaction Transaction
+
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+	err := decoder.Decode(&transaction)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return transaction
 }
 
 func (tx *Transaction) Hash() []byte {
