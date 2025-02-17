@@ -2,12 +2,19 @@ package main
 
 import (
 	"fmt"
+	"github.com/boltdb/bolt"
+	"log"
 	"strconv"
 )
 
-func (cli *CLI) printChain() {
-	bc := NewBlockchain()
-	defer bc.DB.Close()
+func (cli *CLI) printChain(nodeID string) {
+	bc := NewBlockchain(nodeID)
+	defer func(DB *bolt.DB) {
+		err := DB.Close()
+		if err != nil {
+			log.Panic(err)
+		}
+	}(bc.DB)
 
 	bci := bc.Iterator()
 
