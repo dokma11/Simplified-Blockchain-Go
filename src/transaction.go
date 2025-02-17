@@ -41,7 +41,13 @@ func (tx *Transaction) IsCoinbase() bool {
 
 func NewCoinbaseTX(to, data string) *Transaction {
 	if data == "" {
-		data = fmt.Sprintf("Reward to '%s'", to)
+		randData := make([]byte, 20)
+		_, err := rand.Read(randData)
+		if err != nil {
+			log.Panic("ERROR: error reading random data: ", err)
+		}
+
+		data = fmt.Sprintf("%x", randData)
 	}
 
 	txin := TXInput{"", -1, nil, []byte(data)}
@@ -52,11 +58,11 @@ func NewCoinbaseTX(to, data string) *Transaction {
 	return &tx
 }
 
-func NewUTXOTransaction(from, to string, amount int, bc *Blockchain) *Transaction {
+func NewUTXOTransaction(from, to string, amount int, UTXOSet *UTXOSet) *Transaction {
 	wallet := getWalletForAddress(from)
 	pubKeyHash := HashPubKey(wallet.PublicKey)
 
-	acc, validOutputs := bc.FindSpendableOutputs(pubKeyHash, amount)
+	acc, validOutputs := UTXOSet.FindSpendableOutputs(pubKeyHash, amount)
 	if acc < amount {
 		log.Panic("ERROR: Not enough funds")
 	}
@@ -66,7 +72,7 @@ func NewUTXOTransaction(from, to string, amount int, bc *Blockchain) *Transactio
 
 	tx := &Transaction{"", inputs, outputs}
 	tx.ID = string(tx.Hash())
-	bc.SignTransaction(tx, wallet.PrivateKey)
+	UTXOSet.Blockchain.SignTransaction(tx, wallet.PrivateKey)
 
 	return tx
 }

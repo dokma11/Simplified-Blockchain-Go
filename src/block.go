@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
 	"strconv"
@@ -49,7 +48,6 @@ func (b *Block) Serialize() []byte {
 	return result.Bytes()
 }
 
-// DeserializeBlock TODO: videti samo da li da bude metoda ili obicna fja
 func DeserializeBlock(d []byte) *Block {
 	var block Block
 
@@ -63,18 +61,13 @@ func DeserializeBlock(d []byte) *Block {
 }
 
 func (b *Block) HashTransactions() string {
-	var txHashes []string
-	var txHashesByte [][]byte
-	var txHash [32]byte
-
-	for _, hash := range txHashes {
-		txHashesByte = append(txHashesByte, []byte(hash))
-	}
+	var transactions [][]byte
 
 	for _, tx := range b.Transactions {
-		txHashes = append(txHashes, tx.ID)
+		transactions = append(transactions, tx.Serialize())
 	}
-	txHash = sha256.Sum256(bytes.Join(txHashesByte, []byte{}))
 
-	return string(txHash[:])
+	mTree := NewMerkleTree(transactions)
+
+	return string(mTree.RootNode.Data)
 }

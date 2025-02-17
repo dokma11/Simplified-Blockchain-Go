@@ -10,7 +10,6 @@ import (
 	"os"
 )
 
-// TODO: mozda se i ovde mogu vratiti kasnije
 const dbFile = "blockchain_%s.db"
 const blocksBucket = "blocks"
 const genesisCoinbaseData = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks" // BC genesis block data
@@ -21,7 +20,7 @@ type Blockchain struct {
 }
 
 // NewBlockchain creates a new blockchain starting with the genesis block
-func NewBlockchain(address string) *Blockchain {
+func NewBlockchain() *Blockchain {
 	if dbExists() == false {
 		fmt.Println("No existing blockchain found. Create one first.")
 		os.Exit(1)
@@ -115,7 +114,7 @@ func dbExists() bool {
 	return true
 }
 
-func (bc *Blockchain) MineBlock(transactions []*Transaction) {
+func (bc *Blockchain) MineBlock(transactions []*Transaction) *Block {
 	validateTransactions(transactions, bc)
 
 	lastHash := bc.getLastBlockHash()
@@ -123,6 +122,8 @@ func (bc *Blockchain) MineBlock(transactions []*Transaction) {
 	newBlock := NewBlock(transactions, lastHash)
 
 	bc.saveBlock(newBlock)
+
+	return newBlock
 }
 
 func validateTransactions(transactions []*Transaction, bc *Blockchain) {
@@ -167,8 +168,8 @@ func (bc *Blockchain) saveBlock(block *Block) {
 	}
 }
 
-func (bc *Blockchain) FindUnspentTransactions(pubKeyHash []byte) []Transaction {
-	var unspentTXs []Transaction
+func (bc *Blockchain) FindUTXO() map[string]TXOutputs {
+	UTXO := make(map[string]TXOutputs)
 	spentTXOs := make(map[string][]int)
 	bci := bc.Iterator()
 
@@ -176,12 +177,10 @@ func (bc *Blockchain) FindUnspentTransactions(pubKeyHash []byte) []Transaction {
 		block := bci.Next()
 
 		for _, tx := range block.Transactions {
-			if isTransactionUnspent(tx, pubKeyHash, spentTXOs) {
-				unspentTXs = append(unspentTXs, *tx)
-			}
+			checkOutputs(tx, UTXO, spentTXOs)
 
 			if !tx.IsCoinbase() {
-				markSpentOutputs(tx, pubKeyHash, spentTXOs)
+				markSpentOutputs(tx, spentTXOs)
 			}
 		}
 
@@ -190,20 +189,19 @@ func (bc *Blockchain) FindUnspentTransactions(pubKeyHash []byte) []Transaction {
 		}
 	}
 
-	return unspentTXs
+	return UTXO
 }
 
-func isTransactionUnspent(tx *Transaction, pubKeyHash []byte, spentTXOs map[string][]int) bool {
+func checkOutputs(tx *Transaction, UTXO map[string]TXOutputs, spentTXOs map[string][]int) {
 	for outIdx, out := range tx.Vout {
 		if isOutputSpent(tx.ID, outIdx, spentTXOs) {
 			continue
 		}
 
-		if out.IsLockedWithKey(pubKeyHash) {
-			return true
-		}
+		outs := UTXO[tx.ID]
+		outs.Outputs = append(outs.Outputs, out)
+		UTXO[tx.ID] = outs
 	}
-	return false
 }
 
 func isOutputSpent(txID string, outIdx int, spentTXOs map[string][]int) bool {
@@ -215,55 +213,10 @@ func isOutputSpent(txID string, outIdx int, spentTXOs map[string][]int) bool {
 	return false
 }
 
-func markSpentOutputs(tx *Transaction, pubKeyHash []byte, spentTXOs map[string][]int) {
+func markSpentOutputs(tx *Transaction, spentTXOs map[string][]int) {
 	for _, in := range tx.Vin {
-		if in.UsesKey(pubKeyHash) {
-			spentTXOs[in.TxID] = append(spentTXOs[in.TxID], in.Vout)
-		}
+		spentTXOs[in.TxID] = append(spentTXOs[in.TxID], in.Vout)
 	}
-}
-
-func (bc *Blockchain) FindUTXO(pubKeyHash []byte) []TXOutput {
-	var UTXOs []TXOutput
-	unspentTransactions := bc.FindUnspentTransactions(pubKeyHash)
-
-	for _, tx := range unspentTransactions {
-		for _, out := range tx.Vout {
-			if out.IsLockedWithKey(pubKeyHash) {
-				UTXOs = append(UTXOs, out)
-			}
-		}
-	}
-	return UTXOs
-}
-
-func (bc *Blockchain) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[string][]int) {
-	unspentOutputs := make(map[string][]int)
-	unspentTXs := bc.FindUnspentTransactions(pubKeyHash)
-	accumulated := 0
-
-	for _, tx := range unspentTXs {
-		if accumulated >= amount {
-			break
-		}
-		accumulated = collectSpendableOutputs(tx, pubKeyHash, amount, accumulated, unspentOutputs)
-	}
-
-	return accumulated, unspentOutputs
-}
-
-func collectSpendableOutputs(tx Transaction, pubKeyHash []byte, amount, accumulated int, unspentOutputs map[string][]int) int {
-	for outIdx, out := range tx.Vout {
-		if accumulated >= amount {
-			break
-		}
-
-		if out.IsLockedWithKey(pubKeyHash) {
-			accumulated += out.Value
-			unspentOutputs[tx.ID] = append(unspentOutputs[tx.ID], outIdx)
-		}
-	}
-	return accumulated
 }
 
 func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
@@ -292,6 +245,9 @@ func (bc *Blockchain) SignTransaction(tx *Transaction, privateKey ecdsa.PrivateK
 }
 
 func (bc *Blockchain) VerifyTransaction(tx *Transaction) bool {
+	if tx.IsCoinbase() {
+		return true
+	}
 	prevTXs := bc.getPreviousTransactions(tx)
 	return tx.Verify(prevTXs)
 }
